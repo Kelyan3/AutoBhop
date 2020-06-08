@@ -8,23 +8,58 @@
 #pragma newdecls required
  
 bool g_bAutoBhop[MAXPLAYERS + 1];
+bool g_bLateLoad;
+
+Handle g_hAutoBhopCookie;
 
 public Plugin myinfo =
 {
 	name			= "Simple AutoBhop Plugin",
+	description		= "A simple plugin which client can enable or disable auto bunny hopping.",
 	author			= "Kelyan3",
-	description		= "A very simple plugin to enable auto bunny hopping forever which client can enable or disable it.",
 	version			= "0.1",
-	url				= ""
+	url				= "https://steamcommunity.com/id/BeholdTheBahamutSlayer"
 }
  
 public void OnPluginStart()
 {
 	SetCookieMenuItem(MenuHandler_CookieMenu, 0, "AutoBhop");
 
+	g_hAutoBhopCookie = RegClientCookie("autobhop_cookie", "Is autobhop enabled?", CookieAccess_Protected);
+
 	RegConsoleCmd("sm_autobhop", Command_AutoBhop, "Enables/Disables AutoBhop");
+	
+	if (g_bLateLoad)
+	{
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (!IsClientInGame(i) || IsFakeClient(i))
+				continue;
+
+			OnClientCookiesCached(i);
+			OnClientPutInServer(i);
+		}
+	}
 }
- 
+
+public void OnClientDisconnect(int client)
+{
+	g_bAutoBhop[client] = false;
+}
+
+public void OnClientCookiesCached(int client)
+{
+	if (!AreClientCookiesCached(client))
+		return;
+
+	ReadTheCookies(client);
+}
+
+public void OnClientPutInServer(int client)
+{
+	ReadTheCookies(client);
+}
+
 public void MenuHandler_CookieMenu(int client, CookieMenuAction action, any info, char[] buffer, int maxlen)
 {
 	switch (action)
@@ -93,6 +128,8 @@ public void ToggleAutoBhop(int client)
 {
 	g_bAutoBhop[client] = !g_bAutoBhop[client];
 
+	SetClientCookie(client, g_hAutoBhopCookie, g_bAutoBhop[client] ? "1" : "");
+
 	CPrintToChat(client, "{cyan}[AutoBhop] {white}You have %s autobhop", g_bAutoBhop[client] ? "enabled" : "disabled");
 }
  
@@ -119,4 +156,13 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	}
 
 	return Plugin_Continue;
+}
+
+void ReadTheCookies(int client)
+{
+	char sAutoBhop[8];
+
+	GetClientCookie(client, g_hAutoBhopCookie, sAutoBhop, sizeof(sAutoBhop));
+
+	g_bAutoBhop[client] = view_as<bool>(StringToInt(sAutoBhop));
 }
