@@ -3,33 +3,50 @@
 #include <sourcemod>
 #include <sdktools>
 #include <clientprefs>
-#include <multicolors>
  
 #pragma newdecls required
  
+/* BOOLEAN */
 bool g_bAutoBhop[MAXPLAYERS + 1];
-bool g_bLateLoad;
+bool g_bLateLoaded;
 
-Handle g_hAutoBhopCookie;
+/* COOKIES */
+Handle g_hCookie_ClientAutoBhop;
 
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public Plugin myinfo =
 {
-	name			= "Simple AutoBhop Plugin",
-	description		= "A simple plugin which client can enable or disable auto bunny hopping.",
+	name			= "AutoBhop",
+	description		= "Allows clients to toggle on/off autobunnyhopping.",
 	author			= "Kelyan3",
-	version			= "0.1",
-	url				= "https://steamcommunity.com/id/BeholdTheBahamutSlayer"
+	version			= "1.0.0",
+	url				= "https://steamcommunity.com/id/BeholdTheBahamutSlayer",
+};
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErrorLength)
+{
+	g_bLateLoaded = bLate;
+
+	return APLRes_Success;
 }
- 
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public void OnPluginStart()
 {
-	SetCookieMenuItem(MenuHandler_CookieMenu, 0, "AutoBhop");
+	SetCookieMenuItem(MenuHandler_CookieMenu_AutoBhop, 0, "AutoBhop");
 
-	g_hAutoBhopCookie = RegClientCookie("autobhop_cookie", "Is autobhop enabled?", CookieAccess_Protected);
+	g_hCookie_ClientAutoBhop = RegClientCookie("autobhop_cookie", "Is autobhop enabled?", CookieAccess_Protected);
 
-	RegConsoleCmd("sm_autobhop", Command_AutoBhop, "Enables/Disables AutoBhop");
-	
-	if (g_bLateLoad)
+	RegConsoleCmd("sm_autobhop", Command_AutoBhop, "Toggles on/off AutoBhop.");
+
+	if (g_bLateLoaded)
 	{
 		for (int i = 1; i <= MaxClients; i++)
 		{
@@ -42,127 +59,146 @@ public void OnPluginStart()
 	}
 }
 
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------}
 public void OnClientDisconnect(int client)
 {
 	g_bAutoBhop[client] = false;
 }
 
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public void OnClientCookiesCached(int client)
 {
 	if (!AreClientCookiesCached(client))
 		return;
 
-	ReadTheCookies(client);
+	ReadClientCookies(client);
 }
 
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public void OnClientPutInServer(int client)
 {
-	ReadTheCookies(client);
+	ReadClientCookies(client);
 }
 
-public void MenuHandler_CookieMenu(int client, CookieMenuAction action, any info, char[] buffer, int maxlen)
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void MenuHandler_CookieMenu_AutoBhop(int client, CookieMenuAction hAction, any aInfo, char[] sBuffer, int iBufferLength)
 {
-	switch (action)
+	switch (hAction)
 	{
-		case (CookieMenuAction_DisplayOption):
-		{
-			Format(buffer, maxlen, "AutoBhop", client);
-		}
-		case (CookieMenuAction_SelectOption):
-		{
-			ShowSettingsMenu(client);
-		}
+		case CookieMenuAction_DisplayOption:
+			Format(sBuffer, iBufferLength, "AutoBhop", client);
+
+		case CookieMenuAction_SelectOption:
+			DisplaySettingsMenu(client);
 	}
 }
- 
-public void ShowSettingsMenu(int client)
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public void DisplaySettingsMenu(int client)
 {
-	Menu menu = new Menu(MenuHandler_SettingsMenu);
-	menu.SetTitle("AutoBhop Settings");
-	menu.ExitBackButton = true;
+	Menu SettingsMenu = new Menu(MenuHandler_Menu_AutoBhopSettings);
+	SettingsMenu.SetTitle("AutoBhop Settings");
+	SettingsMenu.ExitBackButton = true;
 
 	char sBuffer[128];
 	Format(sBuffer, sizeof(sBuffer), "AutoBhop: %s", g_bAutoBhop[client] ? "Enabled" : "Disabled");
-	menu.AddItem("0", sBuffer);
+	SettingsMenu.AddItem("0", sBuffer);
 
-	menu.Display(client, MENU_TIME_FOREVER);
+	SettingsMenu.Display(client, MENU_TIME_FOREVER);
 }
- 
-public int MenuHandler_SettingsMenu(Menu menu, MenuAction action, int param1, int param2)
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public int MenuHandler_Menu_AutoBhopSettings(Menu SettingsMenu, MenuAction hAction, int iParam1, int iParam2)
 {
-	switch (action)
+	switch (hAction)
 	{
-		case (MenuAction_Select):
+		case MenuAction_Select:
 		{
-			switch (param2)
+			switch (iParam2)
 			{
-				case(0): ToggleAutoBhop(param1);
+				case 0: ToggleAutoBhop(iParam1);
 			}
 
-			ShowSettingsMenu(param1);
+			DisplaySettingsMenu(iParam1);
 		}
-		case (MenuAction_Cancel):
-		{
-			ShowCookieMenu(param1);
-		}
-		case (MenuAction_End):
-		{
-			delete menu;
-		}
+
+		case MenuAction_Cancel:
+			ShowCookieMenu(iParam1);
+
+		case MenuAction_End:
+			delete SettingsMenu;
 	}
+
+	return 0;
 }
- 
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public Action Command_AutoBhop(int client, int argc)
 {
 	if (!client)
 	{
-		ReplyToCommand(client, "[SM] You cannot use this command on the server console.");
+		ReplyToCommand(client, "[SM] Cannot use this command on the server console.");
 		return Plugin_Handled;
 	}
 
 	ToggleAutoBhop(client);
+
 	return Plugin_Handled;
 }
- 
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public void ToggleAutoBhop(int client)
 {
 	g_bAutoBhop[client] = !g_bAutoBhop[client];
 
-	SetClientCookie(client, g_hAutoBhopCookie, g_bAutoBhop[client] ? "1" : "");
+	SetClientCookie(client, g_hCookie_ClientAutoBhop, g_bAutoBhop[client] ? "1" : "");
 
-	CPrintToChat(client, "{cyan}[AutoBhop] {white}You have %s autobhop", g_bAutoBhop[client] ? "enabled" : "disabled");
+	PrintToChat(client, "\x04[AutoBhop] \x01You have \x04%s \x01autobhop for yourself.", g_bAutoBhop[client] ? "enabled" : "disabled");
 }
- 
-public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public Action OnPlayerRunCmd(int client, int &iButtons, int &iImpulse, float fVel[3], float fAngles[3], int &iWeapon, int &iSubType, int &iCmdNum, int &iTickCount, int &iSeed, int iMouse[2])
 {
-	if (g_bAutoBhop[client])
+	if (!g_bAutoBhop[client])
+		return Plugin_Continue;
+
+	if (IsPlayerAlive(client) && iButtons & IN_JUMP)
 	{
-		if (IsPlayerAlive(client))
+		if (!(GetEntityMoveType(client) & MOVETYPE_LADDER) && !(GetEntityFlags(client) & FL_ONGROUND))
 		{
-			if (buttons & IN_JUMP)
-			{
-				if (!(GetEntityFlags(client) & FL_ONGROUND))
-				{
-					if (!(GetEntityMoveType(client) & MOVETYPE_LADDER))
-					{
-						if (GetEntProp(client, Prop_Data, "m_nWaterLevel") <= 1)
-						{
-							buttons &= ~IN_JUMP;
-						}
-					}
-				}
-			}
+			if (GetEntProp(client, Prop_Data, "m_nWaterLevel") <= 1)
+				iButtons &= ~IN_JUMP;
 		}
 	}
 
 	return Plugin_Continue;
 }
 
-void ReadTheCookies(int client)
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+void ReadClientCookies(int client)
 {
-	char sAutoBhop[8];
+	char sCookieValue[8];
+	GetClientCookie(client, g_hCookie_ClientAutoBhop, sCookieValue, sizeof(sCookieValue));
 
-	GetClientCookie(client, g_hAutoBhopCookie, sAutoBhop, sizeof(sAutoBhop));
-
-	g_bAutoBhop[client] = view_as<bool>(StringToInt(sAutoBhop));
+	g_bAutoBhop[client] = view_as<bool>(StringToInt(sCookieValue));
 }
