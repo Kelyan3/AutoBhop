@@ -7,11 +7,15 @@
 #pragma newdecls required
  
 /* BOOLEAN */
-bool g_bAutoBhop[MAXPLAYERS + 1];
-bool g_bLateLoaded;
+bool g_bAutoBhop[MAXPLAYERS + 1] = {false, ...};
+bool g_bAutoBhopGlobal;
+bool g_bLateLoaded = false;
+
+/* CONVARS */
+ConVar g_CVar_AutoBhopGlobal = null;
 
 /* COOKIES */
-Handle g_hCookie_ClientAutoBhop;
+Handle g_hCookie_ClientAutoBhop = null;
 
 //----------------------------------------------------------------------------------------------------
 // Purpose:
@@ -21,7 +25,7 @@ public Plugin myinfo =
 	name			= "AutoBhop",
 	description		= "Allows clients to toggle on/off autobunnyhopping.",
 	author			= "Kelyan3",
-	version			= "1.0.0",
+	version			= "1.0.1",
 	url				= "https://steamcommunity.com/id/BeholdTheBahamutSlayer",
 };
 
@@ -40,11 +44,17 @@ public APLRes AskPluginLoad2(Handle hMyself, bool bLate, char[] sError, int iErr
 //----------------------------------------------------------------------------------------------------
 public void OnPluginStart()
 {
-	SetCookieMenuItem(MenuHandler_CookieMenu_AutoBhop, 0, "AutoBhop");
+	LoadTranslations("common.phrases");
+
+	g_CVar_AutoBhopGlobal = CreateConVar("sm_autobhop_global", "0", "Specifies whether to toggle on/off AutoBhop features for players and admins.", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_CVar_AutoBhopGlobal.AddChangeHook(ConVarChanged_AutoBhop);
+
+	RegAdminCmd("sm_abstatus", Command_AutoBhopStatus, ADMFLAG_BAN, "Checks a client's AutoBhop status.");
+
+	RegConsoleCmd("sm_ab", Command_AutoBhop, "Toggles on/off AutoBhop.");
+	RegConsoleCmd("sm_autobhop", Command_AutoBhop, "Toggles on/off AutoBhop.");
 
 	g_hCookie_ClientAutoBhop = RegClientCookie("autobhop_cookie", "Is autobhop enabled?", CookieAccess_Protected);
-
-	RegConsoleCmd("sm_autobhop", Command_AutoBhop, "Toggles on/off AutoBhop.");
 
 	if (g_bLateLoaded)
 	{
@@ -57,11 +67,23 @@ public void OnPluginStart()
 			OnClientPutInServer(i);
 		}
 	}
+
+	AutoExecConfig(true, "plugin.AutoBhop");
+
+	SetCookieMenuItem(MenuHandler_CookieMenu_AutoBhop, 0, "AutoBhop");
 }
 
 //----------------------------------------------------------------------------------------------------
 // Purpose:
-//----------------------------------------------------------------------------------------------------}
+//----------------------------------------------------------------------------------------------------
+public void ConVarChanged_AutoBhop(ConVar hConVar, const char[] sOldValue, const char[] sNewValue)
+{
+	g_bAutoBhopGlobal = g_CVar_AutoBhopGlobal.BoolValue;
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public void OnClientDisconnect(int client)
 {
 	g_bAutoBhop[client] = false;
@@ -111,8 +133,8 @@ public void DisplaySettingsMenu(int client)
 	SettingsMenu.ExitBackButton = true;
 
 	char sBuffer[128];
-	Format(sBuffer, sizeof(sBuffer), "AutoBhop: %s", g_bAutoBhop[client] ? "Enabled" : "Disabled");
-	SettingsMenu.AddItem("0", sBuffer);
+	Format(sBuffer, sizeof(sBuffer), "AutoBhop: %s", g_bAutoBhopGlobal ? (g_bAutoBhop[client] ? "Enabled" : "Disabled") : "Disabled by host.");
+	SettingsMenu.AddItem("0", sBuffer, g_bAutoBhopGlobal ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 
 	SettingsMenu.Display(client, MENU_TIME_FOREVER);
 }
@@ -147,11 +169,53 @@ public int MenuHandler_Menu_AutoBhopSettings(Menu SettingsMenu, MenuAction hActi
 //----------------------------------------------------------------------------------------------------
 // Purpose:
 //----------------------------------------------------------------------------------------------------
+public Action Command_AutoBhopStatus(int client, int argc)
+{
+	if (!client)
+	{
+		ReplyToCommand(client, "[AutoBhop] Cannot use this command on the server console.");
+		return Plugin_Handled;
+	}
+
+	if (argc < 1)
+	{
+		ReplyToCommand(client, "\x04[AutoBhop] \x01Usage: sm_abstatus <#userid|name>");
+		return Plugin_Handled;
+	}
+
+	if (!g_bAutoBhopGlobal)
+	{
+		ReplyToCommand(client, "\x04[AutoBhop] \x01This command is currently disabled by the host.");
+		return Plugin_Handled;
+	}
+
+	int iTarget;
+	char sTarget[32];
+
+	GetCmdArg(1, sTarget, sizeof(sTarget));
+
+	if ((iTarget = FindTarget(client, sTarget, false)) <= 0)
+		return Plugin_Handled;
+
+	ReplyToCommand(client, "\x04[AutoBhop] \x01Checking \x03%N\x01's current AutoBhop status: %s", iTarget, g_bAutoBhop[iTarget] ? "\x04ON" : "\x07FF4040OFF");
+
+	return Plugin_Handled;
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
 public Action Command_AutoBhop(int client, int argc)
 {
 	if (!client)
 	{
-		ReplyToCommand(client, "[SM] Cannot use this command on the server console.");
+		ReplyToCommand(client, "[AutoBhop] Cannot use this command on the server console.");
+		return Plugin_Handled;
+	}
+
+	if (!g_bAutoBhopGlobal)
+	{
+		ReplyToCommand(client, "\x04[AutoBhop] \x01This command is currently disabled by the host.");
 		return Plugin_Handled;
 	}
 
@@ -177,7 +241,7 @@ public void ToggleAutoBhop(int client)
 //----------------------------------------------------------------------------------------------------
 public Action OnPlayerRunCmd(int client, int &iButtons, int &iImpulse, float fVel[3], float fAngles[3], int &iWeapon, int &iSubType, int &iCmdNum, int &iTickCount, int &iSeed, int iMouse[2])
 {
-	if (!g_bAutoBhop[client])
+	if (!g_bAutoBhop[client] || !g_bAutoBhopGlobal)
 		return Plugin_Continue;
 
 	if (IsPlayerAlive(client) && iButtons & IN_JUMP)
