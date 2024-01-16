@@ -47,8 +47,10 @@ public void OnPluginStart()
 	LoadTranslations("common.phrases");
 
 	g_CVar_AutoBhopGlobal = CreateConVar("sm_autobhop_global", "0", "Specifies whether to toggle on/off AutoBhop features for players and admins.", FCVAR_NONE, true, 0.0, true, 1.0);
+	g_bAutoBhopGlobal = g_CVar_AutoBhopGlobal.BoolValue;
 	g_CVar_AutoBhopGlobal.AddChangeHook(ConVarChanged_AutoBhop);
 
+	RegAdminCmd("sm_abforce", Command_AutoBhopForce, ADMFLAG_BAN, "Forcefully toggles on/off a client's AutoBhop status.");
 	RegAdminCmd("sm_abstatus", Command_AutoBhopStatus, ADMFLAG_BAN, "Checks a client's AutoBhop status.");
 
 	RegConsoleCmd("sm_ab", Command_AutoBhop, "Toggles on/off AutoBhop.");
@@ -198,6 +200,69 @@ public Action Command_AutoBhopStatus(int client, int argc)
 		return Plugin_Handled;
 
 	ReplyToCommand(client, "\x04[AutoBhop] \x01Checking \x03%N\x01's current AutoBhop status: %s", iTarget, g_bAutoBhop[iTarget] ? "\x04ON" : "\x07FF4040OFF");
+
+	return Plugin_Handled;
+}
+
+//----------------------------------------------------------------------------------------------------
+// Purpose:
+//----------------------------------------------------------------------------------------------------
+public Action Command_AutoBhopForce(int client, int argc)
+{
+	if (!client)
+	{
+		ReplyToCommand(client, "[AutoBhop] Cannot use this command on the server console.");
+		return Plugin_Handled;
+	}
+
+	if (!g_bAutoBhopGlobal)
+	{
+		ReplyToCommand(client, "\x04[AutoBhop] \x01This command is currently disabled by the host.");
+		return Plugin_Handled;
+	}
+
+	if (argc < 1)
+	{
+		ReplyToCommand(client, "\x04[AutoBhop] \x01Usage: sm_abforce <#userid|name> <optional:0|1>");
+		return Plugin_Handled;
+	}
+
+	char sArgs[65];
+	GetCmdArg(1, sArgs, sizeof(sArgs));
+
+	int iToggleBhop = -1;
+
+	char sArgs2[32];
+	GetCmdArg(2, sArgs2, sizeof(sArgs2));
+
+	if (StringToIntEx(sArgs2, iToggleBhop) == 0)
+	{
+		ReplyToCommand(client, "\x04[AutoBhop] \x01Invalid Value.");
+		return Plugin_Handled;
+	}
+
+	char sTargetName[MAX_TARGET_LENGTH];
+	int iTargetList[MAXPLAYERS];
+	int iTargetCount;
+	bool bIsML;
+
+	if ((iTargetCount = ProcessTargetString(sArgs, client, iTargetList, MAXPLAYERS, COMMAND_FILTER_ALIVE | COMMAND_FILTER_CONNECTED, sTargetName, sizeof(sTargetName), bIsML)) <= 0)
+	{
+		ReplyToTargetError(client, iTargetCount);
+		return Plugin_Handled;
+	}
+
+	for (int i = 0; i < iTargetCount; i++)
+	{
+		g_bAutoBhop[iTargetList[i]] = iToggleBhop ? true : false;
+	}
+
+	ShowActivity2(client, "\x04[AutoBhop] \x03", "\x01Forcefully \x04%s \x01autobhop on target \x04%s\x01.", iToggleBhop ? "enabled" : "disabled", sTargetName);
+
+	if (iTargetCount > 1)
+		LogAction(client, -1, "\"%L\" has forcefully %s autobhop on target \"%s\".", client, iToggleBhop ? "enabled" : "disabled", sTargetName);
+	else
+		LogAction(client, iTargetList[0], "\"%L\" has forcefully %s autobhop on target \"%L\".", client, iToggleBhop ? "enabled" : "disabled", iTargetList[0]);
 
 	return Plugin_Handled;
 }
