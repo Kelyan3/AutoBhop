@@ -221,9 +221,9 @@ public Action Command_AutoBhopForce(int client, int argc)
 		return Plugin_Handled;
 	}
 
-	if (argc < 1)
+	if (argc < 2)
 	{
-		ReplyToCommand(client, "\x04[AutoBhop] \x01Usage: sm_abforce <#userid|name> <optional:0|1>");
+		ReplyToCommand(client, "\x04[AutoBhop] \x01Usage: sm_abforce <#userid|name> <0|1>");
 		return Plugin_Handled;
 	}
 
