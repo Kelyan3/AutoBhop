@@ -231,7 +231,7 @@ public Action Command_AutoBhopForce(int client, int argc)
 		return Plugin_Handled;
 	}
 
-	if (argc < 1)
+	if (argc < 2)
 	{
 		char sCommand[64];
 		GetCmdArg(0, sCommand, sizeof(sCommand));
